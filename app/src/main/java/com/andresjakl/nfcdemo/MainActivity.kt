@@ -23,18 +23,18 @@
  */
 package com.andresjakl.nfcdemo
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
-import android.support.v7.app.AppCompatActivity
+import android.nfc.Tag
 import android.os.Bundle
-import android.nfc.tech.NfcF
-import android.content.IntentFilter
-import android.app.PendingIntent
-import android.os.PatternMatcher
+import android.support.v7.app.AppCompatActivity
 import android.text.Html
-import kotlinx.android.synthetic.main.activity_main.*
 import android.text.Spanned
+import android.widget.Toast
+import kotlinx.android.synthetic.main.activity_main.*
+import kotlin.experimental.and
 
 class MainActivity : AppCompatActivity() {
     // NFC adapter for checking NFC state in the device
@@ -154,10 +154,25 @@ class MainActivity : AppCompatActivity() {
             //        }
             //    }
             //}
-
+        }
+        else if(checkIntent.action == NfcAdapter.ACTION_TECH_DISCOVERED)
+        {
+            Toast.makeText(this, "teck discoverd", Toast.LENGTH_LONG).show();
+        }
+        else if(checkIntent.action == NfcAdapter.ACTION_TAG_DISCOVERED)
+        {
+            val tag: Tag = checkIntent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+            logMessage("New Tag", tag.toString() +  byteArrayToHexString(tag.id));
         }
     }
 
+    fun byteArrayToHexString(bytes: ByteArray): String? {
+        val sb = StringBuilder()
+        for (b in bytes) {
+            sb.append(String.format("%02X", b and 0xff.toByte()))
+        }
+        return sb.toString()
+    }
     /**
      * Parse the NDEF message contents and print these to the on-screen log.
      */
