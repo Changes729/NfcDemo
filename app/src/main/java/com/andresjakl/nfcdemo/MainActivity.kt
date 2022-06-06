@@ -28,12 +28,13 @@ import android.content.Intent
 import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
 import android.nfc.Tag
+import android.nfc.tech.MifareClassic
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.text.Html
 import android.text.Spanned
-import android.widget.Toast
 import kotlinx.android.synthetic.main.activity_main.*
+import java.io.IOException
 import kotlin.experimental.and
 
 class MainActivity : AppCompatActivity() {
@@ -140,36 +141,93 @@ class MainActivity : AppCompatActivity() {
                 // Process the messages array.
                 processNdefMessages(messages)
             }
-
-            // Simple variant: assume we have 1x URI record
-            //if (rawMessages != null && rawMessages.isNotEmpty()) {
-            //    val ndefMsg = rawMessages[0] as NdefMessage
-            //    if (ndefMsg.records != null && ndefMsg.records.isNotEmpty()) {
-            //        val ndefRecord = ndefMsg.records[0]
-            //        if (ndefRecord.toUri() != null) {
-            //            logMessage("URI detected", ndefRecord.toUri().toString())
-            //        } else {
-            //            // Other NFC Tags
-            //            logMessage("Payload", ndefRecord.payload.contentToString())
-            //        }
-            //    }
-            //}
         }
         else if(checkIntent.action == NfcAdapter.ACTION_TECH_DISCOVERED)
         {
-            Toast.makeText(this, "teck discoverd", Toast.LENGTH_LONG).show();
+            // todo: check.
         }
         else if(checkIntent.action == NfcAdapter.ACTION_TAG_DISCOVERED)
         {
             val tag: Tag = checkIntent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
-            logMessage("New Tag", tag.toString() +  byteArrayToHexString(tag.id));
+            readTagId(tag);
+            readTagData(tag);
+            updateTagData(tag);
         }
     }
 
-    fun byteArrayToHexString(bytes: ByteArray): String? {
+    private fun updateTagData(tag: Tag) {
+        if (tag.techList.contains(MifareClassic::class.java.name)) {
+            val mifareTag = MifareClassic.get(tag)
+            try {
+                val BLOCK_INDEX = 1;
+                mifareTag.connect()
+                if (mifareTag.authenticateSectorWithKeyB(0, MifareClassic.KEY_DEFAULT)) {
+                    var bytes = mifareTag.readBlock(BLOCK_INDEX);
+                    logMessage("Update bytes:", byteArrayToHexString(bytes, " "));
+                    bytes[0] = (bytes[0] + 1).toByte();
+                    logMessage("To:", byteArrayToHexString(bytes, " "));
+                    mifareTag.writeBlock(BLOCK_INDEX, bytes);
+                    bytes = mifareTag.readBlock(BLOCK_INDEX);
+                    logMessage("Check bytes:", byteArrayToHexString(bytes, " "));
+                }
+            } catch (e: IOException) {
+                logMessage("Error:", e.message)
+            }
+            finally {
+                mifareTag.close()
+            }
+        }
+    }
+
+    private fun readTagId(tag: Tag) {
+        logMessage("New Tag", tag.toString() +  byteArrayToHexString(tag.id, " "));
+    }
+
+    private fun readTagData(tag: Tag) {
+        if (tag.techList.contains(MifareClassic::class.java.name)) {
+            val mifareTag = MifareClassic.get(tag);
+            val stringBuilder = StringBuilder();
+            var lastSector = -1;
+            try {
+                mifareTag.connect();
+                for (index: Int in 0 until mifareTag.blockCount) {
+                    val currentSector = mifareTag.blockToSector(index);
+                    if (lastSector != currentSector) {
+                        if (mifareTag.authenticateSectorWithKeyB(
+                                currentSector,
+                                MifareClassic.KEY_DEFAULT
+                            )
+                        ) {
+                            lastSector = currentSector;
+                            stringBuilder.append("Sector $currentSector <br>");
+                            continue;
+                        }
+
+                        break;
+                    }
+
+                    stringBuilder.append(
+                        "[" + byteArrayToHexString(
+                            mifareTag.readBlock(index),
+                            ","
+                        ) + "]<br>"
+                    );
+                }
+            } catch (e: IOException) {
+                logMessage("Error:", e.message);
+            }
+            finally {
+                mifareTag.close();
+            }
+            logMessage("Block Value:", stringBuilder.toString());
+        }
+    }
+
+    private fun byteArrayToHexString(bytes: ByteArray, split: String = ""): String {
         val sb = StringBuilder()
         for (b in bytes) {
             sb.append(String.format("%02X", b and 0xff.toByte()))
+            sb.append(split);
         }
         return sb.toString()
     }
@@ -192,7 +250,7 @@ class MainActivity : AppCompatActivity() {
                         logMessage("- URI", curRecord.toUri().toString())
                     } else {
                         // Other NDEF Tags - simply print the payload
-                        logMessage("- Contents", curRecord.payload.contentToString())
+                        logMessage("- Contents", curRecord.payload!!.contentToString())
                     }
                 }
             }
@@ -228,12 +286,7 @@ class MainActivity : AppCompatActivity() {
      * @param html HTML-formatted string to convert to a Spanned text.
      */
     private fun fromHtml(html: String): Spanned {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY)
-        } else {
-            @Suppress("DEPRECATION")
-            Html.fromHtml(html)
-        }
+        return Html.fromHtml(html, Html.FROM_HTML_MODE_LEGACY)
     }
 
     /**
