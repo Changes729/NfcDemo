@@ -26,15 +26,18 @@ package com.andresjakl.nfcdemo
 import android.app.PendingIntent
 import android.content.Intent
 import android.nfc.NdefMessage
+import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.MifareClassic
+import android.nfc.tech.Ndef
 import android.os.Bundle
 import android.support.v7.app.AppCompatActivity
 import android.text.Html
 import android.text.Spanned
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.IOException
+import java.nio.charset.Charset
 import kotlin.experimental.and
 
 class MainActivity : AppCompatActivity() {
@@ -134,7 +137,7 @@ class MainActivity : AppCompatActivity() {
 
             // Complete variant: parse NDEF messages
             if (rawMessages != null) {
-                val messages = arrayOfNulls<NdefMessage?>(rawMessages.size)// Array<NdefMessage>(rawMessages.size, {})
+                val messages = arrayOfNulls<NdefMessage?>(rawMessages.size)
                 for (i in rawMessages.indices) {
                     messages[i] = rawMessages[i] as NdefMessage;
                 }
@@ -151,7 +154,21 @@ class MainActivity : AppCompatActivity() {
             val tag: Tag = checkIntent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
             readTagId(tag);
             readTagData(tag);
-            updateTagData(tag);
+//            updateTagData(tag);
+            writeNdefToTag(tag);
+        }
+    }
+
+    private fun writeNdefToTag(tag: Tag){
+        val mimeRecord = NdefRecord.createMime("application/vnd.com.example.android.beam",
+            "Beam me up, Android".toByteArray(Charset.forName("US-ASCII")))
+
+        try {
+            val ndef = Ndef.get(tag)
+            ndef.connect()
+            ndef.writeNdefMessage(NdefMessage(mimeRecord))
+        } catch (e: IOException) {
+            print(e.message)
         }
     }
 
